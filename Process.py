@@ -16,11 +16,14 @@ S_LOW = 89
 S_HIGH = 179
 V_LOW = 200
 V_HIGH = 255
-LIMIT_LEN = 200
+TOP_LIMIT_LEN = 800
+BOTTOM_LIMIT_LEN = 500
+START_INDEX = 300
 
 sum_frame = None
 ret = None
 frame = None
+interest_area = None
 
 
 def nothing(x):
@@ -68,23 +71,60 @@ def threshold(img):
     upper = np.array([hu, su, vu])
     mask = cv2.inRange(hsv, lower, upper)
 
-    kernel = np.ones((4, 4), np.float32) / 255
+    # kernel = np.ones((4, 4), np.float32) / 255
     # mask = cv2.filter2D(mask, -1, kernel)
     # mask = fgbg.apply(mask)
     return mask
 
 
-def interpolate(img):
-    points = np.array(np.argwhere(img > 250))
+def interpolate(points):
+    # points = np.array(np.argwhere(img > 250))
     f = None
-    if len(points) > LIMIT_LEN:
+    if len(points) > BOTTOM_LIMIT_LEN:
         y = points[:, 0]
         x = points[:, 1]
         if len(x) == 0:
             return None
-        z = np.polyfit(x, y, 50)
+        z = np.polyfit(x, y, 50)  # RankWarning: Polyfit may be poorly conditioned
         f = np.poly1d(z)
     return f
+
+
+def center_mass_filter(img):
+    res = img
+    if len(res.shape) == 2:
+        res = cv2.cvtColor(res, cv2.COLOR_GRAY2RGB)
+    points = np.array(np.argwhere(res > 250))
+    try:
+        y_mean = int(np.mean(points[:, 0]))
+        x_mean = int(np.mean(points[:, 1]))
+        if x_mean > 1150 or x_mean<950:
+            return np.array([])
+        # x_s.append(x_mean)
+        print("X=" + str(x_mean))
+        c_x = 0.3
+        c_y = 0.1
+        x_ = int(c_x * np.ptp(points[:, 1]))
+        y_ = int(c_y * np.ptp(points[:, 0]))
+        mask1 = abs(points[:, 1] - x_mean) < x_
+        mask2 = abs(points[:, 0] - y_mean) < y_
+        mask_total = mask1 & mask2
+        res_points = points[mask_total, :]
+    except Exception as exc:
+        print(type(exc))
+        print(exc.args)
+        print(exc)
+        res_points = np.array([])
+
+    return res_points
+
+
+def fast():
+    example = np.ones([500, 500, 500], dtype=np.uint8)
+    img = example.copy()
+    height, width, depth = img.shape
+    img[0:height, 0:width // 4, 0:depth] = 0  # DO THIS INSTEAD
+    return img
 
 
 def draw_line(img, f):
@@ -136,23 +176,33 @@ def show_image(show_img, lmain):
     lmain.configure(image=imgtk)
 
 
+count = 0
+
+x_s = []
+
 def show_frame():
     if IS_PAUSE:
         try:
             global frame
             ret, frame = cap.read()
-            # frame = cv2.flip(frame, 1)
-            img = frame
-            img = cv2.bitwise_and(img, img, mask=bit_mask)
-            img = threshold(img)
-            interpolation = interpolate(img)
-            global sum_frame
-            show_img = sum_frame
-            if interpolation != None:
-                # show_img = draw_line(frame, interpolation)
-                show_img = draw_line(sum_frame, interpolation)
-                # show_img = draw_line(img, interpolation)
-            show_image(show_img, lmain)
+            global count
+            count = count + 1
+            # print("count= " + str(count))
+            if count > START_INDEX:
+                # frame_len = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT))
+                # frame = cv2.flip(frame, 1)
+                img = frame
+                img = threshold(img)
+                img = cv2.bitwise_and(img, img, mask=bit_mask)
+                points = center_mass_filter(img)
+                interpolation = interpolate(points)
+                global sum_frame
+                show_img = sum_frame
+                if interpolation != None:
+                    # show_img = draw_line(frame, interpolation)
+                    show_img = draw_line(sum_frame, interpolation)
+                    # show_img = draw_line(img, interpolation)
+                show_image(show_img, lmain)
         except Exception as exc:
             print(type(exc))
             print(exc.args)
@@ -205,6 +255,7 @@ screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
 init()
 bit_mask = cv2.imread("resources/ImageMask.jpg", 0)
+interest_area = np.array(np.argwhere(bit_mask > 250))
 line_channel_paths = []
 channels = []
 for path in line_channel_paths:
