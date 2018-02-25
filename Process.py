@@ -77,12 +77,21 @@ def threshold(img):
     return mask
 
 
+y_mean = None
+
+
 def interpolate(points):
     # points = np.array(np.argwhere(img > 250))
     f = None
     if len(points) > BOTTOM_LIMIT_LEN:
         y = points[:, 0]
         x = points[:, 1]
+
+        # x = np.append([100, 200, 300, 400,500,600,700,800], x)
+        # y = np.append([y_mean, y_mean, y_mean, y_mean, y_mean, y_mean, y_mean, y_mean], y)
+        # x = np.append(x, [1400,1500,1600,1700, 1750, 1800, 1850])
+        # y = np.append(y, [y_mean,y_mean,y_mean,y_mean, y_mean, y_mean, y_mean])
+
         if len(x) == 0:
             return None
         z = np.polyfit(x, y, 50)  # RankWarning: Polyfit may be poorly conditioned
@@ -96,12 +105,14 @@ def center_mass_filter(img):
         res = cv2.cvtColor(res, cv2.COLOR_GRAY2RGB)
     points = np.array(np.argwhere(res > 250))
     try:
-        y_mean = int(np.mean(points[:, 0]))
-        x_mean = int(np.mean(points[:, 1]))
-        if x_mean > 1150 or x_mean<950:
+        global y_mean
+        y_mean = (np.mean(points[:, 0]))
+        x_mean = (np.mean(points[:, 1]))
+        if np.isnan(x_mean) or np.isnan(y_mean) or x_mean > 1150 or x_mean < 950:
             return np.array([])
+        x_mean = int(x_mean)
+        y_mean = int(y_mean)
         # x_s.append(x_mean)
-        print("X=" + str(x_mean))
         c_x = 0.3
         c_y = 0.1
         x_ = int(c_x * np.ptp(points[:, 1]))
@@ -110,6 +121,7 @@ def center_mass_filter(img):
         mask2 = abs(points[:, 0] - y_mean) < y_
         mask_total = mask1 & mask2
         res_points = points[mask_total, :]
+        # res_points = np.append(res_points, [[y_mean,1500],[y_mean,1510],[y_mean,1540]])
     except Exception as exc:
         print(type(exc))
         print(exc.args)
@@ -133,7 +145,7 @@ def draw_line(img, f):
         result = cv2.cvtColor(result, cv2.COLOR_GRAY2RGB)
     try:
         h, w, c = result.shape
-        for i in range(800, 1400):
+        for i in range(900, 1200):
             value = f(i)
             if h > value > 0:
                 result[int(value), i] = [0, 0, 255]
@@ -168,7 +180,7 @@ def init_frame():
 
 
 def show_image(show_img, lmain):
-    cv2image = show_img  # cv2.resize(show_img, (int(screensize[0] * 0.8), int(screensize[1] * 0.8)))
+    cv2image = cv2.resize(show_img, (int(screensize[0] * 0.8), int(screensize[1] * 0.8)))
 
     cv2image = cv2.flip(cv2image, 0)
     imgtk = convert_image(cv2image)
@@ -179,6 +191,7 @@ def show_image(show_img, lmain):
 count = 0
 
 x_s = []
+
 
 def show_frame():
     if IS_PAUSE:
