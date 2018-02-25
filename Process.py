@@ -87,7 +87,7 @@ def interpolate(points):
         y = points[:, 0]
         x = points[:, 1]
 
-        if(str(y_mean) in mask_dict):
+        if (str(y_mean) in mask_dict):
             x = np.append([mask_dict[str(y_mean)][0]], x)
             y = np.append([y_mean], y)
             x = np.append(x, [[mask_dict[str(y_mean)][1]]])
@@ -146,9 +146,10 @@ def draw_line(img, f):
         result = cv2.cvtColor(result, cv2.COLOR_GRAY2RGB)
     try:
         h, w, c = result.shape
-        for i in range(900, 1200):
+        frm, to = mask_dict['0'][0], mask_dict['0'][1]
+        for i in range(frm, to):
             value = f(i)
-            if h > value > 0:
+            if h > value > 0 and str(int(value)) in mask_dict and mask_dict[str(int(value))][0] < i and mask_dict[str(int(value))][1] > i:
                 result[int(value), i] = [0, 0, 255]
     except Exception as exc:
         print(type(exc))
@@ -234,10 +235,6 @@ def init_menu(main_window):
     menu.add_command(label=" saveFrame ", command=save_frame)
 
 
-def do_smth():
-    print("test")
-
-
 def get_file():
     filepath = "resources"
     filename = "047_5623.MOV"
@@ -289,6 +286,7 @@ def read_mask():
                 mask_dict[key] = new_val
         else:
             mask_dict[key] = (value, value)
+
 
 read_mask()
 line_channel_paths = []
