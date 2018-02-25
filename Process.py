@@ -23,7 +23,8 @@ START_INDEX = 300
 sum_frame = None
 ret = None
 frame = None
-interest_area = None
+mask_dict = None
+bit_mask = None
 
 
 def nothing(x):
@@ -81,16 +82,16 @@ y_mean = None
 
 
 def interpolate(points):
-    # points = np.array(np.argwhere(img > 250))
     f = None
     if len(points) > BOTTOM_LIMIT_LEN:
         y = points[:, 0]
         x = points[:, 1]
 
-        # x = np.append([100, 200, 300, 400,500,600,700,800], x)
-        # y = np.append([y_mean, y_mean, y_mean, y_mean, y_mean, y_mean, y_mean, y_mean], y)
-        # x = np.append(x, [1400,1500,1600,1700, 1750, 1800, 1850])
-        # y = np.append(y, [y_mean,y_mean,y_mean,y_mean, y_mean, y_mean, y_mean])
+        if(str(y_mean) in mask_dict):
+            x = np.append([mask_dict[str(y_mean)][0]], x)
+            y = np.append([y_mean], y)
+            x = np.append(x, [[mask_dict[str(y_mean)][1]]])
+            y = np.append(y, [y_mean])
 
         if len(x) == 0:
             return None
@@ -267,8 +268,29 @@ screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
 
 init()
-bit_mask = cv2.imread("resources/ImageMask.jpg", 0)
-interest_area = np.array(np.argwhere(bit_mask > 250))
+
+
+def read_mask():
+    global bit_mask, mask_dict
+    bit_mask = cv2.imread("resources/ImageMask.jpg", 0)
+    interest_area = np.array(np.argwhere(bit_mask > 250))
+    mask_dict = dict()
+    for i in range(len(interest_area)):
+        key = str(interest_area[i][0])
+        value = interest_area[i][1]
+        if key in mask_dict:
+            val = mask_dict[key]
+            new_val = None
+            if val[0] > value:
+                new_val = (value, val[1])
+            elif val[1] < value:
+                new_val = (val[0], value)
+            if new_val is not None:
+                mask_dict[key] = new_val
+        else:
+            mask_dict[key] = (value, value)
+
+read_mask()
 line_channel_paths = []
 channels = []
 for path in line_channel_paths:
