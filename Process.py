@@ -25,6 +25,7 @@ ret = None
 frame = None
 mask_dict = None
 bit_mask = None
+line_masks = []
 
 
 def nothing(x):
@@ -88,9 +89,9 @@ def interpolate(points):
         x = points[:, 1]
 
         if (str(y_mean) in mask_dict):
-            x = np.append([mask_dict[str(y_mean)][0]], x)
+            x = np.append([mask_dict[str(y_mean)][0]-200], x)
             y = np.append([y_mean], y)
-            x = np.append(x, [[mask_dict[str(y_mean)][1]]])
+            x = np.append(x, [[mask_dict[str(y_mean)][1]+200]])
             y = np.append(y, [y_mean])
 
         if len(x) == 0:
@@ -113,7 +114,6 @@ def center_mass_filter(img):
             return np.array([])
         x_mean = int(x_mean)
         y_mean = int(y_mean)
-        # x_s.append(x_mean)
         c_x = 0.3
         c_y = 0.1
         x_ = int(c_x * np.ptp(points[:, 1]))
@@ -122,7 +122,6 @@ def center_mass_filter(img):
         mask2 = abs(points[:, 0] - y_mean) < y_
         mask_total = mask1 & mask2
         res_points = points[mask_total, :]
-        # res_points = np.append(res_points, [[y_mean,1500],[y_mean,1510],[y_mean,1540]])
     except Exception as exc:
         print(type(exc))
         print(exc.args)
@@ -149,7 +148,8 @@ def draw_line(img, f):
         frm, to = mask_dict['0'][0], mask_dict['0'][1]
         for i in range(frm, to):
             value = f(i)
-            if h > value > 0 and str(int(value)) in mask_dict and mask_dict[str(int(value))][0] < i and mask_dict[str(int(value))][1] > i:
+            if h > value > 0 and str(int(value)) in mask_dict and mask_dict[str(int(value))][0] < i and \
+                            mask_dict[str(int(value))][1] > i:
                 result[int(value), i] = [0, 0, 255]
     except Exception as exc:
         print(type(exc))
@@ -172,7 +172,6 @@ def init_frame():
         global sum_frame
         if sum_frame is None:
             sum_frame = frame
-        # frame = cv2.flip(frame, 1)
         show_image(frame, lmain)
     except Exception as exc:
         print(type(exc))
@@ -185,6 +184,7 @@ def show_image(show_img, lmain):
     cv2image = cv2.resize(show_img, (int(screensize[0] * 0.8), int(screensize[1] * 0.8)))
 
     cv2image = cv2.flip(cv2image, 0)
+    cv2image = cv2.flip(cv2image, 1)
     imgtk = convert_image(cv2image)
     lmain.imgtk = imgtk
     lmain.configure(image=imgtk)
@@ -195,6 +195,13 @@ count = 0
 x_s = []
 
 
+def process_lines(img):
+    res = cv2.bitwise_and(img, img, mask=line_masks[0])
+    line = np.array(np.argwhere(res > 250))
+    return line
+
+
+
 def show_frame():
     if IS_PAUSE:
         try:
@@ -202,20 +209,21 @@ def show_frame():
             ret, frame = cap.read()
             global count
             count = count + 1
-            # print("count= " + str(count))
             if count > START_INDEX:
-                # frame_len = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT))
-                # frame = cv2.flip(frame, 1)
                 img = frame
                 img = threshold(img)
-                img = cv2.bitwise_and(img, img, mask=bit_mask)
-                points = center_mass_filter(img)
-                interpolation = interpolate(points)
+                line = process_lines(img)
+                if len(line) <= 5:
+                    img = cv2.bitwise_and(img, img, mask=bit_mask)
+                    points = center_mass_filter(img)
+                    interpolation = interpolate(points)
+                else:
+                    interpolation = None
                 global sum_frame
                 show_img = sum_frame
                 if interpolation != None:
-                    # show_img = draw_line(frame, interpolation)
                     show_img = draw_line(sum_frame, interpolation)
+                #     show_img = draw_line(sum_frame, interpolation)
                     # show_img = draw_line(img, interpolation)
                 show_image(show_img, lmain)
         except Exception as exc:
@@ -228,11 +236,48 @@ def show_frame():
 def init_menu(main_window):
     menu = tkinter.Menu(main_window)
     main_window.config(menu=menu)
-    # subMenu = tkinter.Menu(menu)
-    # menu.add_cascade(label="Action", menu=subMenu)
-    # subMenu.add_command(label="Test", command=do_smth)
+    subMenu = tkinter.Menu(menu)
+    menu.add_cascade(label="Lines", menu=subMenu)
+    subMenu.add_command(label="Def line", command=def_line)
     menu.add_command(label=" > ", command=start_pause)
-    menu.add_command(label=" saveFrame ", command=save_frame)
+    menu.add_command(label=" saveFrame", command=save_frame)
+
+
+def def_line():
+    cv2.namedWindow('DefLine')
+    cv2.setMouseCallback("DefLine", get_point)
+    while (1):
+        cv2.imshow("DefLine", frame)
+        k = cv2.waitKey(20) & 0xFF
+        if k == 27:
+            break
+    cv2.destroyAllWindows()
+
+
+ix_1 = None
+iy_1 = None
+ix_2 = None
+iy_2 = None
+
+
+def get_point(event, x, y, flags, param):
+    global ix_1, iy_1, ix_2, iy_2, frame
+    if event == cv2.EVENT_LBUTTONDBLCLK:
+        if ix_1 is None:
+            cv2.circle(frame, (x, y), 10, (255, 0, 0), -1)
+            ix_1, iy_1 = x, y
+        elif ix_2 is None:
+            cv2.circle(frame, (x, y), 10, (255, 0, 0), -1)
+            ix_2, iy_2 = x, y
+        else:
+            k = (iy_2 - iy_1) / (ix_2 - ix_1)
+            b = iy_1 - k * ix_1
+            ix_0 = int(-b / k)
+            height, width, depth = frame.shape
+            ix_ = int((height - b) / k)
+            blank_image = np.zeros((height, width, 3), np.uint8)
+            cv2.line(blank_image, (ix_, height), (ix_0, 0), (255, 255, 255), thickness=3, lineType=8)
+            cv2.imwrite("resources/Line1.jpg", blank_image)
 
 
 def get_file():
@@ -267,6 +312,13 @@ screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 init()
 
 
+def read_lines():
+    line_channel_paths = ["resources/Line1.jpg"]
+    global line_masks
+    for path in line_channel_paths:
+        line_masks.append(cv2.imread(path, 0))
+
+
 def read_mask():
     global bit_mask, mask_dict
     bit_mask = cv2.imread("resources/ImageMask.jpg", 0)
@@ -286,15 +338,9 @@ def read_mask():
                 mask_dict[key] = new_val
         else:
             mask_dict[key] = (value, value)
+    read_lines()
 
 
 read_mask()
-line_channel_paths = []
-channels = []
-for path in line_channel_paths:
-    channels.append(cv2.imread(path, 0))
-
-######
-
 init_frame()
 root.mainloop()
